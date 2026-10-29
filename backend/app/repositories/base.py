@@ -2,7 +2,13 @@ from abc import ABC, abstractmethod
 from typing import Optional
 from app.models.subject import SubjectCreate, SubjectUpdate, SubjectResponse
 from app.models.unit import SyllabusUnitCreate, SyllabusUnitResponse
-from app.models.resource import ResourceCreate, ResourceUpdate, ResourceResponse, SourceType
+from app.models.resource import (
+    ResourceCreate,
+    ResourceUpdate,
+    ResourceResponse,
+    SourceType,
+    DocumentPageResponse,
+)
 
 
 class WorkspaceRepository(ABC):
@@ -60,10 +66,29 @@ class WorkspaceRepository(ABC):
         pass
 
     @abstractmethod
-    async def update_resource(self, resource_id: str, data: ResourceUpdate) -> Optional[ResourceResponse]:
+    async def update_resource(
+        self,
+        resource_id: str,
+        data: ResourceUpdate,
+        page_count: Optional[int] = None,
+        error_message: Optional[str] = None,
+    ) -> Optional[ResourceResponse]:
         pass
 
     @abstractmethod
     async def delete_resource(self, resource_id: str) -> bool:
         pass
+
+    @abstractmethod
+    async def save_document_pages(
+        self, resource_id: str, pages: list[dict]
+    ) -> None:
+        pass
+
+    @abstractmethod
+    async def get_document_pages(
+        self, resource_id: str
+    ) -> list[DocumentPageResponse]:
+        pass
+
 

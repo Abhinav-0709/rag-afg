@@ -39,6 +39,7 @@ class ResourceUpdate(BaseModel):
     source_type: Optional[SourceType] = None
     unit_id: Optional[str] = None
     status: Optional[ProcessingStatus] = None
+    storage_path: Optional[str] = None
 
 
 class ResourceResponse(ResourceBase):
@@ -46,7 +47,31 @@ class ResourceResponse(ResourceBase):
     subject_id: str
     storage_path: Optional[str] = None
     status: ProcessingStatus = ProcessingStatus.READY
+    page_count: int = 0
+    error_message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentPageResponse(BaseModel):
+    id: str
+    resource_id: str
+    page_number: int
+    content: str
+    char_count: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentPagesListResponse(BaseModel):
+    resource_id: str
+    title: str
+    file_name: str
+    page_count: int
+    status: ProcessingStatus
+    error_message: Optional[str] = None
+    pages: list[DocumentPageResponse]
+

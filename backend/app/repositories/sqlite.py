@@ -6,7 +6,14 @@ import aiosqlite
 
 from app.models.subject import SubjectCreate, SubjectUpdate, SubjectResponse
 from app.models.unit import SyllabusUnitCreate, SyllabusUnitResponse
-from app.models.resource import ResourceCreate, ResourceUpdate, ResourceResponse, SourceType, ProcessingStatus
+from app.models.resource import (
+    ResourceCreate,
+    ResourceUpdate,
+    ResourceResponse,
+    SourceType,
+    ProcessingStatus,
+    DocumentPageResponse,
+)
 from app.repositories.base import WorkspaceRepository
 
 
@@ -63,10 +70,34 @@ class SQLiteWorkspaceRepository(WorkspaceRepository):
                     file_size_bytes INTEGER DEFAULT 0,
                     storage_path TEXT,
                     status TEXT NOT NULL DEFAULT 'ready',
+                    page_count INTEGER DEFAULT 0,
+                    error_message TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
                     FOREIGN KEY (unit_id) REFERENCES syllabus_units(id) ON DELETE SET NULL
+                );
+            """)
+
+            # Safe column migration for existing tables
+            try:
+                await db.execute("ALTER TABLE academic_resources ADD COLUMN page_count INTEGER DEFAULT 0;")
+            except Exception:
+                pass
+            try:
+                await db.execute("ALTER TABLE academic_resources ADD COLUMN error_message TEXT;")
+            except Exception:
+                pass
+
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS document_pages (
+                    id TEXT PRIMARY KEY,
+                    resource_id TEXT NOT NULL,
+                    page_number INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    char_count INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (resource_id) REFERENCES academic_resources(id) ON DELETE CASCADE
                 );
             """)
             await db.commit()
@@ -296,6 +327,8 @@ class SQLiteWorkspaceRepository(WorkspaceRepository):
                     file_size_bytes=row["file_size_bytes"],
                     storage_path=row["storage_path"],
                     status=ProcessingStatus(row["status"]),
+                    page_count=row["page_count"] or 0,
+                    error_message=row["error_message"],
                     created_at=parse_iso(row["created_at"]),
                     updated_at=parse_iso(row["updated_at"]),
                 )
@@ -337,13 +370,21 @@ class SQLiteWorkspaceRepository(WorkspaceRepository):
                         file_size_bytes=row["file_size_bytes"],
                         storage_path=row["storage_path"],
                         status=ProcessingStatus(row["status"]),
+                        page_count=row["page_count"] or 0,
+                        error_message=row["error_message"],
                         created_at=parse_iso(row["created_at"]),
                         updated_at=parse_iso(row["updated_at"]),
                     )
                     for row in rows
                 ]
 
-    async def update_resource(self, resource_id: str, data: ResourceUpdate) -> Optional[ResourceResponse]:
+    async def update_resource(
+        self,
+        resource_id: str,
+        data: ResourceUpdate,
+        page_count: Optional[int] = None,
+        error_message: Optional[str] = None,
+    ) -> Optional[ResourceResponse]:
         existing = await self.get_resource(resource_id)
         if not existing:
             return None
@@ -354,16 +395,29 @@ class SQLiteWorkspaceRepository(WorkspaceRepository):
         )
         updated_unit_id = data.unit_id if data.unit_id is not None else existing.unit_id
         updated_status = data.status.value if data.status is not None else existing.status.value
+        updated_storage = data.storage_path if data.storage_path is not None else existing.storage_path
+        updated_page_count = page_count if page_count is not None else existing.page_count
+        updated_err = error_message if error_message is not None else existing.error_message
         now = utc_now_iso()
 
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """
                 UPDATE academic_resources 
-                SET title = ?, source_type = ?, unit_id = ?, status = ?, updated_at = ?
+                SET title = ?, source_type = ?, unit_id = ?, status = ?, storage_path = ?, page_count = ?, error_message = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (updated_title, updated_source_type, updated_unit_id, updated_status, now, resource_id),
+                (
+                    updated_title,
+                    updated_source_type,
+                    updated_unit_id,
+                    updated_status,
+                    updated_storage,
+                    updated_page_count,
+                    updated_err,
+                    now,
+                    resource_id,
+                ),
             )
             await db.commit()
 
@@ -374,4 +428,49 @@ class SQLiteWorkspaceRepository(WorkspaceRepository):
             cursor = await db.execute("DELETE FROM academic_resources WHERE id = ?", (resource_id,))
             await db.commit()
             return cursor.rowcount > 0
+
+    async def save_document_pages(self, resource_id: str, pages: list[dict]) -> None:
+        now = utc_now_iso()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("PRAGMA foreign_keys = ON;")
+            for p in pages:
+                page_id = str(uuid.uuid4())
+                await db.execute(
+                    """
+                    INSERT INTO document_pages (id, resource_id, page_number, content, char_count, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        page_id,
+                        resource_id,
+                        p["page_number"],
+                        p["content"],
+                        p["char_count"],
+                        now,
+                    ),
+                )
+            await db.commit()
+
+    async def get_document_pages(self, resource_id: str) -> list[DocumentPageResponse]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            query = """
+                SELECT id, resource_id, page_number, content, char_count, created_at
+                FROM document_pages
+                WHERE resource_id = ?
+                ORDER BY page_number ASC
+            """
+            async with db.execute(query, (resource_id,)) as cursor:
+                rows = await cursor.fetchall()
+                return [
+                    DocumentPageResponse(
+                        id=row["id"],
+                        resource_id=row["resource_id"],
+                        page_number=row["page_number"],
+                        content=row["content"],
+                        char_count=row["char_count"],
+                        created_at=parse_iso(row["created_at"]),
+                    )
+                    for row in rows
+                ]
 

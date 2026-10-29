@@ -9,9 +9,11 @@ import {
   fetchResources,
   deleteUnit,
   deleteResource,
+  getDownloadUrl,
 } from "@/lib/api";
 import { CreateUnitModal } from "@/components/CreateUnitModal";
-import { CreateResourceModal } from "@/components/CreateResourceModal";
+import { UploadResourceModal } from "@/components/UploadResourceModal";
+import { DocumentViewerModal } from "@/components/DocumentViewerModal";
 import {
   ArrowLeft,
   Layers,
@@ -23,6 +25,10 @@ import {
   FileCheck,
   Search,
   MessageSquare,
+  UploadCloud,
+  Eye,
+  Download,
+  AlertTriangle,
 } from "lucide-react";
 
 interface SubjectWorkspaceViewProps {
@@ -44,7 +50,8 @@ export function SubjectWorkspaceView({
 
   // Modals state
   const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
-  const [isResourceModalOpen, setIsResourceModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [viewingResource, setViewingResource] = useState<AcademicResource | null>(null);
   const [resourceFilter, setResourceFilter] = useState<string>("all");
 
   useEffect(() => {
@@ -91,7 +98,7 @@ export function SubjectWorkspaceView({
   }
 
   async function handleDeleteResource(resourceId: string) {
-    if (!confirm("Are you sure you want to remove this academic resource record?")) return;
+    if (!confirm("Are you sure you want to remove this document and its extracted text?")) return;
     try {
       await deleteResource(resourceId);
       setResources((prev) => prev.filter((r) => r.id !== resourceId));
@@ -289,7 +296,7 @@ export function SubjectWorkspaceView({
                           {unit.title}
                         </h3>
                         <span className="rounded border border-[var(--border-default)] px-1.5 py-0.2 text-[10px] text-[var(--text-muted)]">
-                          {unitResources.length} resources linked
+                          {unitResources.length} documents linked
                         </span>
                       </div>
                       {unit.description && (
@@ -347,35 +354,35 @@ export function SubjectWorkspaceView({
 
               <button
                 type="button"
-                onClick={() => setIsResourceModalOpen(true)}
+                onClick={() => setIsUploadModalOpen(true)}
                 className="inline-flex items-center gap-1.5 rounded bg-[var(--accent-primary)] px-3 py-1.5 text-xs font-medium text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] transition-colors"
               >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Add Resource Record</span>
+                <UploadCloud className="h-3.5 w-3.5" />
+                <span>Upload Document</span>
               </button>
             </div>
           </div>
 
           {loading ? (
             <div className="py-8 text-center text-xs text-[var(--text-muted)]">
-              Loading academic resources...
+              Loading academic documents...
             </div>
           ) : filteredResources.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-surface)] p-8 text-center">
               <FileCheck className="h-6 w-6 text-[var(--text-muted)] mb-2" />
               <div className="text-xs font-semibold text-[var(--text-primary)]">
-                No resources recorded
+                No documents uploaded yet
               </div>
               <p className="mt-1 text-[11px] text-[var(--text-secondary)] max-w-sm">
-                Add references for your textbooks, notes, or examination papers to associate them with this subject.
+                Upload your textbooks, notes, or examination papers (PDF, DOCX, TXT, images) to store and extract their content.
               </p>
               <button
                 type="button"
-                onClick={() => setIsResourceModalOpen(true)}
+                onClick={() => setIsUploadModalOpen(true)}
                 className="mt-3 inline-flex items-center gap-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface-elevated)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]"
               >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Add First Resource</span>
+                <UploadCloud className="h-3.5 w-3.5" />
+                <span>Upload First Document</span>
               </button>
             </div>
           ) : (
@@ -387,37 +394,81 @@ export function SubjectWorkspaceView({
                     key={res.id}
                     className="flex items-center justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] p-3.5 transition-colors hover:border-[var(--border-active)] text-xs"
                   >
-                    <div className="flex items-start gap-3">
+                    <div
+                      onClick={() => setViewingResource(res)}
+                      className="flex items-start gap-3 cursor-pointer flex-1"
+                    >
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[var(--border-default)] bg-[var(--bg-surface-elevated)] text-[var(--text-primary)]">
                         <BookOpen className="h-4 w-4" />
                       </div>
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-[var(--text-primary)]">
+                          <span className="font-semibold text-[var(--text-primary)] hover:underline">
                             {res.title}
                           </span>
                           <span className="rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] px-1.5 py-0.2 font-mono text-[10px] text-[var(--text-secondary)] uppercase">
                             {res.source_type}
                           </span>
+                          <span
+                            className={`rounded px-1.5 py-0.2 text-[9px] font-medium ${
+                              res.status === "ready"
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                                : "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"
+                            }`}
+                          >
+                            {res.status.toUpperCase()}
+                          </span>
                         </div>
                         <div className="flex items-center gap-3 text-[11px] text-[var(--text-muted)] font-mono">
                           <span>{res.file_name}</span>
+                          <span>•</span>
+                          <span>{res.page_count} pages extracted</span>
                           <span>•</span>
                           <span className="text-[var(--text-secondary)]">
                             {assignedUnit ? `Unit ${assignedUnit.unit_number}: ${assignedUnit.title}` : "All Units"}
                           </span>
                         </div>
+                        {res.error_message && (
+                          <div className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
+                            <AlertTriangle className="h-3 w-3 shrink-0" />
+                            <span className="line-clamp-1">{res.error_message}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteResource(res.id)}
-                      aria-label="Delete resource"
-                      className="rounded p-1 text-[var(--text-muted)] hover:text-red-500 hover:bg-[var(--bg-subtle)] transition-colors"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1.5 ml-3">
+                      <button
+                        type="button"
+                        onClick={() => setViewingResource(res)}
+                        aria-label="Inspect extracted pages"
+                        className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
+                        title="View Extracted Pages"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+
+                      <a
+                        href={getDownloadUrl(res.id)}
+                        download={res.file_name}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
+                        title="Download Original File"
+                      >
+                        <Download className="h-4 w-4" />
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteResource(res.id)}
+                        aria-label="Delete resource"
+                        className="rounded p-1 text-[var(--text-muted)] hover:text-red-500 hover:bg-[var(--bg-subtle)] transition-colors"
+                        title="Delete Document"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -436,7 +487,7 @@ export function SubjectWorkspaceView({
             Subject-Grounded RAG Pipeline (Phase 4)
           </h3>
           <p className="text-[11px] text-[var(--text-secondary)] max-w-md mx-auto leading-relaxed">
-            In Phase 3 &amp; 4, file uploads (PDF, OCR, DOCX) and vector embeddings will enable asking questions strictly grounded in &ldquo;{subject.name}&rdquo; with verifiable citations and Mermaid flowcharts.
+            Now that files ({resources.length} registered) and extracted pages are ready, Phase 4 will embed the chunks and enable asking questions grounded strictly in &ldquo;{subject.name}&rdquo;.
           </p>
         </div>
       )}
@@ -450,14 +501,20 @@ export function SubjectWorkspaceView({
         onUnitCreated={(newUnit) => setUnits((prev) => [...prev, newUnit])}
       />
 
-      <CreateResourceModal
-        isOpen={isResourceModalOpen}
+      <UploadResourceModal
+        isOpen={isUploadModalOpen}
         subjectId={subject.id}
         units={units}
-        onClose={() => setIsResourceModalOpen(false)}
-        onResourceCreated={(newRes) => setResources((prev) => [newRes, ...prev])}
+        onClose={() => setIsUploadModalOpen(false)}
+        onResourceUploaded={(newRes) => setResources((prev) => [newRes, ...prev])}
       />
+
+      {viewingResource && (
+        <DocumentViewerModal
+          resource={viewingResource}
+          onClose={() => setViewingResource(null)}
+        />
+      )}
     </div>
   );
 }
-

@@ -47,8 +47,29 @@ export interface AcademicResource {
   file_size_bytes: number;
   storage_path?: string | null;
   status: ProcessingStatus;
+  page_count: number;
+  error_message?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface DocumentPage {
+  id: string;
+  resource_id: string;
+  page_number: number;
+  content: string;
+  char_count: number;
+  created_at: string;
+}
+
+export interface DocumentPagesList {
+  resource_id: string;
+  title: string;
+  file_name: string;
+  page_count: number;
+  status: ProcessingStatus;
+  error_message?: string | null;
+  pages: DocumentPage[];
 }
 
 export async function fetchSubjects(): Promise<Subject[]> {
@@ -179,4 +200,37 @@ export async function deleteResource(resourceId: string): Promise<void> {
     throw new Error("Failed to delete academic resource");
   }
 }
+
+export async function uploadAcademicFile(
+  subjectId: string,
+  formData: FormData
+): Promise<AcademicResource> {
+  const res = await fetch(`${API_BASE_URL}/subjects/${subjectId}/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to upload and extract document");
+  }
+  return res.json();
+}
+
+export async function fetchDocumentPages(
+  resourceId: string
+): Promise<DocumentPagesList> {
+  const res = await fetch(`${API_BASE_URL}/resources/${resourceId}/pages`, {
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error("Failed to fetch extracted document pages");
+  }
+  return res.json();
+}
+
+export function getDownloadUrl(resourceId: string): string {
+  return `${API_BASE_URL}/resources/${resourceId}/download`;
+}
+
 
