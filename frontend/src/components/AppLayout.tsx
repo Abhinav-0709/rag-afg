@@ -12,12 +12,23 @@ import {
   Compass,
 } from "lucide-react";
 import { ThemeSelector } from "@/components/ThemeSelector";
+import { Subject } from "@/lib/api";
 
 interface AppLayoutProps {
   children: React.ReactNode;
+  subjects?: Subject[];
+  selectedSubject?: Subject | null;
+  onSelectSubject?: (subject: Subject | null) => void;
+  onNewSubjectClick?: () => void;
 }
 
-export function AppLayout({ children }: AppLayoutProps) {
+export function AppLayout({
+  children,
+  subjects = [],
+  selectedSubject = null,
+  onSelectSubject,
+  onNewSubjectClick,
+}: AppLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "subjects" | "resources" | "papers">("overview");
 
@@ -50,7 +61,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 Academic Assistant
               </div>
               <div className="text-[10px] text-[var(--text-muted)] font-mono">
-                RAG Workspace v0.1
+                RAG Workspace v0.2
               </div>
             </div>
           </div>
@@ -69,7 +80,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <button
             type="button"
             onClick={() => {
-              setActiveTab("subjects");
+              if (onNewSubjectClick) onNewSubjectClick();
               setMobileMenuOpen(false);
             }}
             className="flex w-full items-center justify-center gap-2 rounded border border-dashed border-[var(--border-default)] bg-[var(--bg-canvas)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-active)] hover:bg-[var(--bg-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] transition-colors"
@@ -89,10 +100,11 @@ export function AppLayout({ children }: AppLayoutProps) {
             type="button"
             onClick={() => {
               setActiveTab("overview");
+              if (onSelectSubject) onSelectSubject(null);
               setMobileMenuOpen(false);
             }}
             className={`flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs font-medium transition-colors ${
-              activeTab === "overview"
+              activeTab === "overview" && !selectedSubject
                 ? "bg-[var(--bg-subtle)] text-[var(--text-primary)] font-semibold border-l-2 border-[var(--accent-primary)]"
                 : "text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
             }`}
@@ -105,10 +117,11 @@ export function AppLayout({ children }: AppLayoutProps) {
             type="button"
             onClick={() => {
               setActiveTab("subjects");
+              if (onSelectSubject) onSelectSubject(null);
               setMobileMenuOpen(false);
             }}
             className={`flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs font-medium transition-colors ${
-              activeTab === "subjects"
+              activeTab === "subjects" && !selectedSubject
                 ? "bg-[var(--bg-subtle)] text-[var(--text-primary)] font-semibold border-l-2 border-[var(--accent-primary)]"
                 : "text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
             }`}
@@ -116,14 +129,50 @@ export function AppLayout({ children }: AppLayoutProps) {
             <FolderKanban className="h-4 w-4 shrink-0" />
             <span>Subject Workspaces</span>
             <span className="ml-auto rounded border border-[var(--border-default)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
-              0
+              {subjects.length}
             </span>
           </button>
+
+          {/* Subjects list in sidebar */}
+          {subjects.length > 0 && (
+            <div className="pl-4 pt-1 space-y-1">
+              {subjects.map((s) => {
+                const isSelected = selectedSubject?.id === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      if (onSelectSubject) onSelectSubject(s);
+                      setMobileMenuOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-xs transition-colors ${
+                      isSelected
+                        ? "bg-[var(--bg-surface-elevated)] font-semibold text-[var(--text-primary)] border border-[var(--border-active)]"
+                        : "text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+                    }`}
+                  >
+                    <span className="truncate">{s.name}</span>
+                    {s.code && (
+                      <span className="font-mono text-[9px] text-[var(--text-muted)] ml-1">
+                        {s.code}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="pt-3 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Materials
+          </div>
 
           <button
             type="button"
             onClick={() => {
               setActiveTab("resources");
+              if (onSelectSubject) onSelectSubject(null);
               setMobileMenuOpen(false);
             }}
             className={`flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs font-medium transition-colors ${
@@ -134,15 +183,13 @@ export function AppLayout({ children }: AppLayoutProps) {
           >
             <BookOpen className="h-4 w-4 shrink-0" />
             <span>Academic Resources</span>
-            <span className="ml-auto rounded border border-[var(--border-default)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
-              0
-            </span>
           </button>
 
           <button
             type="button"
             onClick={() => {
               setActiveTab("papers");
+              if (onSelectSubject) onSelectSubject(null);
               setMobileMenuOpen(false);
             }}
             className={`flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-xs font-medium transition-colors ${
@@ -153,9 +200,6 @@ export function AppLayout({ children }: AppLayoutProps) {
           >
             <FileText className="h-4 w-4 shrink-0" />
             <span>Previous Exam Papers</span>
-            <span className="ml-auto rounded border border-[var(--border-default)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
-              0
-            </span>
           </button>
         </nav>
 
@@ -188,16 +232,22 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="flex items-center gap-2 text-xs">
               <span className="text-[var(--text-muted)]">Workspace</span>
               <span className="text-[var(--text-muted)]">/</span>
-              <span className="font-medium text-[var(--text-primary)] capitalize">
-                {activeTab}
-              </span>
+              {selectedSubject ? (
+                <span className="font-medium text-[var(--text-primary)]">
+                  {selectedSubject.name}
+                </span>
+              ) : (
+                <span className="font-medium text-[var(--text-primary)] capitalize">
+                  {activeTab}
+                </span>
+              )}
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-1.5 text-xs text-[var(--text-secondary)] border border-[var(--border-default)] px-2.5 py-1 rounded bg-[var(--bg-canvas)]">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              <span>Academic RAG Engine Ready</span>
+              <span>FastAPI Backend Connected</span>
             </div>
           </div>
         </header>
@@ -210,4 +260,3 @@ export function AppLayout({ children }: AppLayoutProps) {
     </div>
   );
 }
-
