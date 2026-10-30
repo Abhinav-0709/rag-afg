@@ -72,6 +72,48 @@ export interface DocumentPagesList {
   pages: DocumentPage[];
 }
 
+export type AnswerMode = "source_only" | "combine_sources" | "general";
+
+export type AnswerFormat =
+  | "detailed"
+  | "short"
+  | "2_mark"
+  | "5_mark"
+  | "10_mark"
+  | "step_by_step";
+
+export interface RetrievedCitation {
+  chunk_id: string;
+  resource_id: string;
+  document_title: string;
+  file_name: string;
+  source_type: SourceType;
+  unit_id?: string | null;
+  page_number: number;
+  excerpt: string;
+  score: number;
+}
+
+export interface RAGQueryRequest {
+  query: string;
+  subject_id: string;
+  unit_id?: string | null;
+  mode: AnswerMode;
+  answer_format: AnswerFormat;
+  source_types?: SourceType[];
+}
+
+export interface RAGQueryResponse {
+  answer: string;
+  grounded: boolean;
+  mode_used: AnswerMode;
+  format_used: AnswerFormat;
+  citations: RetrievedCitation[];
+  retrieved_count: number;
+  disclaimer?: string | null;
+  timestamp: string;
+}
+
 export async function fetchSubjects(): Promise<Subject[]> {
   const res = await fetch(`${API_BASE_URL}/subjects`, {
     headers: { "Content-Type": "application/json" },
@@ -231,6 +273,21 @@ export async function fetchDocumentPages(
 
 export function getDownloadUrl(resourceId: string): string {
   return `${API_BASE_URL}/resources/${resourceId}/download`;
+}
+
+export async function queryAcademicRAG(
+  req: RAGQueryRequest
+): Promise<RAGQueryResponse> {
+  const res = await fetch(`${API_BASE_URL}/rag/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to query academic knowledge assistant");
+  }
+  return res.json();
 }
 
 

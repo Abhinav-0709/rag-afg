@@ -9,6 +9,13 @@ from app.models.resource import (
     DocumentPageResponse,
     DocumentPagesListResponse,
 )
+from app.models.rag import (
+    AnswerMode,
+    AnswerFormat,
+    RetrievedCitation,
+    RAGQueryRequest,
+    RAGQueryResponse,
+)
 
 __all__ = [
     "SubjectCreate",
@@ -24,5 +31,10 @@ __all__ = [
     "ResourceResponse",
     "DocumentPageResponse",
     "DocumentPagesListResponse",
+    "AnswerMode",
+    "AnswerFormat",
+    "RetrievedCitation",
+    "RAGQueryRequest",
+    "RAGQueryResponse",
 ]
 

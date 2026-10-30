@@ -14,6 +14,7 @@ import {
 import { CreateUnitModal } from "@/components/CreateUnitModal";
 import { UploadResourceModal } from "@/components/UploadResourceModal";
 import { DocumentViewerModal } from "@/components/DocumentViewerModal";
+import { SubjectChatTab } from "@/components/SubjectChatTab";
 import {
   ArrowLeft,
   Layers,
@@ -23,7 +24,6 @@ import {
   Trash2,
   Calendar,
   FileCheck,
-  Search,
   MessageSquare,
   UploadCloud,
   Eye,
@@ -224,7 +224,7 @@ export function SubjectWorkspaceView({
           }`}
         >
           <MessageSquare className="h-3.5 w-3.5" />
-          <span>Subject Q&A (Phase 4)</span>
+          <span>Subject Q&A</span>
         </button>
       </div>
 
@@ -477,19 +477,14 @@ export function SubjectWorkspaceView({
         </div>
       )}
 
-      {/* Tab: Subject Q&A Roadmap Preview */}
+      {/* Tab: Subject Q&A Chat */}
       {activeTab === "chat" && (
-        <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-surface)] p-8 text-center space-y-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-default)] bg-[var(--bg-canvas)] mx-auto text-[var(--text-secondary)]">
-            <Search className="h-5 w-5" />
-          </div>
-          <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-            Subject-Grounded RAG Pipeline (Phase 4)
-          </h3>
-          <p className="text-[11px] text-[var(--text-secondary)] max-w-md mx-auto leading-relaxed">
-            Now that files ({resources.length} registered) and extracted pages are ready, Phase 4 will embed the chunks and enable asking questions grounded strictly in &ldquo;{subject.name}&rdquo;.
-          </p>
-        </div>
+        <SubjectChatTab
+          subject={subject}
+          units={units}
+          resources={resources}
+          onOpenViewer={(res) => setViewingResource(res)}
+        />
       )}
 
       {/* Modals */}

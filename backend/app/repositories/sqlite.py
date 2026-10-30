@@ -100,6 +100,23 @@ class SQLiteWorkspaceRepository(WorkspaceRepository):
                     FOREIGN KEY (resource_id) REFERENCES academic_resources(id) ON DELETE CASCADE
                 );
             """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS document_chunks (
+                    id TEXT PRIMARY KEY,
+                    resource_id TEXT NOT NULL,
+                    subject_id TEXT NOT NULL,
+                    unit_id TEXT,
+                    page_number INTEGER NOT NULL,
+                    chunk_index INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    char_count INTEGER NOT NULL,
+                    token_count INTEGER NOT NULL,
+                    embedding_json TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (resource_id) REFERENCES academic_resources(id) ON DELETE CASCADE,
+                    FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE
+                );
+            """)
             await db.commit()
 
     async def create_subject(self, data: SubjectCreate) -> SubjectResponse:
@@ -473,4 +490,82 @@ class SQLiteWorkspaceRepository(WorkspaceRepository):
                     )
                     for row in rows
                 ]
+
+    async def save_document_chunks(self, chunks: list[dict]) -> None:
+        if not chunks:
+            return
+        now = utc_now_iso()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("PRAGMA foreign_keys = ON;")
+            for c in chunks:
+                chunk_id = c.get("id") or str(uuid.uuid4())
+                await db.execute(
+                    """
+                    INSERT INTO document_chunks 
+                    (id, resource_id, subject_id, unit_id, page_number, chunk_index, content, char_count, token_count, embedding_json, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        chunk_id,
+                        c["resource_id"],
+                        c["subject_id"],
+                        c.get("unit_id"),
+                        c["page_number"],
+                        c["chunk_index"],
+                        c["content"],
+                        c["char_count"],
+                        c.get("token_count", len(c["content"].split())),
+                        c.get("embedding_json"),
+                        now,
+                    ),
+                )
+            await db.commit()
+
+    async def get_candidate_chunks(
+        self,
+        subject_id: str,
+        unit_id: Optional[str] = None,
+        source_types: Optional[list[str]] = None,
+    ) -> list[dict]:
+        conditions = ["c.subject_id = ?"]
+        params: list[any] = [subject_id]
+
+        if unit_id:
+            conditions.append("(c.unit_id = ? OR c.unit_id IS NULL)")
+            params.append(unit_id)
+
+        if source_types:
+            placeholders = ",".join("?" for _ in source_types)
+            conditions.append(f"r.source_type IN ({placeholders})")
+            params.extend(source_types)
+
+        where_sql = " AND ".join(conditions)
+
+        query = f"""
+            SELECT 
+                c.id AS chunk_id,
+                c.resource_id,
+                c.subject_id,
+                c.unit_id,
+                c.page_number,
+                c.chunk_index,
+                c.content,
+                c.char_count,
+                c.token_count,
+                c.embedding_json,
+                r.title AS document_title,
+                r.file_name,
+                r.source_type
+            FROM document_chunks c
+            JOIN academic_resources r ON c.resource_id = r.id
+            WHERE {where_sql}
+            ORDER BY c.created_at ASC
+        """
+
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
 

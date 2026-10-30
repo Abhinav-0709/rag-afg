@@ -91,4 +91,20 @@ class WorkspaceRepository(ABC):
     ) -> list[DocumentPageResponse]:
         pass
 
+    @abstractmethod
+    async def save_document_chunks(
+        self, chunks: list[dict]
+    ) -> None:
+        pass
+
+    @abstractmethod
+    async def get_candidate_chunks(
+        self,
+        subject_id: str,
+        unit_id: Optional[str] = None,
+        source_types: Optional[list[str]] = None,
+    ) -> list[dict]:
+        pass
+
+
 

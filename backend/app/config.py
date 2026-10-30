@@ -26,6 +26,27 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
 
+    # AI & LLM Provider Configuration
+    AI_PROVIDER: str = "fallback"  # 'gemini', 'groq', 'nemotron', 'openai', or 'fallback'
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    NVIDIA_API_KEY: str = ""
+    NEMOTRON_API_KEY: str = ""
+    NEMOTRON_MODEL: str = "nvidia/llama-3.1-nemotron-70b-instruct"
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
+    # Embedding Configuration
+    EMBEDDING_PROVIDER: str = "fallback"  # 'gemini', 'openai', or 'fallback'
+    GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
+
+    # RAG Chunking Parameters
+    CHUNK_SIZE_CHARS: int = 800
+    CHUNK_OVERLAP_CHARS: int = 150
+    TOP_K_RETRIEVAL: int = 5
+
     # CORS configuration
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",

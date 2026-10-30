@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Optional
 from app.config import settings
@@ -13,6 +14,8 @@ from app.models.resource import (
 )
 from app.repositories.base import WorkspaceRepository
 from app.services.document_extractor import DocumentExtractor
+from app.services.chunker import TextChunker
+from app.services.ai_providers import get_embedding_provider
 
 
 class WorkspaceService:
@@ -145,12 +148,39 @@ class WorkspaceService:
         # 3. Extract content and metadata
         extraction = DocumentExtractor.extract_from_file(stored_file_path, file_ext)
 
-        # 4. Save extracted pages if any
+        # 4. Save extracted pages and generate searchable chunks
         if extraction.pages:
             await self.repo.save_document_pages(
                 initial_record.id,
                 [p.model_dump() for p in extraction.pages],
             )
+
+            # Generate chunks with page-level metadata
+            all_chunks = []
+            embedding_provider = get_embedding_provider()
+            for p in extraction.pages:
+                page_chunks = TextChunker.chunk_page(
+                    page_number=p.page_number,
+                    content=p.content,
+                    chunk_size=settings.CHUNK_SIZE_CHARS,
+                    chunk_overlap=settings.CHUNK_OVERLAP_CHARS,
+                )
+                for c in page_chunks:
+                    emb = await embedding_provider.embed_text(c.content)
+                    all_chunks.append({
+                        "resource_id": initial_record.id,
+                        "subject_id": subject_id,
+                        "unit_id": unit_id,
+                        "page_number": c.page_number,
+                        "chunk_index": c.chunk_index,
+                        "content": c.content,
+                        "char_count": c.char_count,
+                        "token_count": c.token_count,
+                        "embedding_json": json.dumps(emb),
+                    })
+
+            if all_chunks:
+                await self.repo.save_document_chunks(all_chunks)
 
         # 5. Update resource record with status, storage path, page count, and warnings
         updated = await self.repo.update_resource(
