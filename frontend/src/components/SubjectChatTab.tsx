@@ -25,7 +25,9 @@ import {
   RotateCcw,
   CheckCircle2,
   HelpCircle,
+  Workflow,
 } from "lucide-react";
+import { MermaidDiagram } from "@/components/MermaidDiagram";
 
 interface SubjectChatTabProps {
   subject: Subject;
@@ -62,6 +64,7 @@ export function SubjectChatTab({
   const [selectedUnitId, setSelectedUnitId] = useState<string>("");
   const [mode, setMode] = useState<AnswerMode>("source_only");
   const [answerFormat, setAnswerFormat] = useState<AnswerFormat>("detailed");
+  const [diagramSetting, setDiagramSetting] = useState<"auto" | "on" | "off">("auto");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedCitationId, setExpandedCitationId] = useState<string | null>(null);
@@ -100,9 +103,9 @@ export function SubjectChatTab({
 
   const samplePrompts = [
     "Explain the fundamental concepts in this course",
+    "Show a flowchart of the core algorithm step-by-step",
     "Summarize the key definitions and formulas",
-    "Explain the main algorithm step-by-step",
-    "What are the most important topics covered?",
+    "Explain the process lifecycle and state transitions",
   ];
 
   async function handleSend(queryText?: string) {
@@ -127,6 +130,7 @@ export function SubjectChatTab({
         unit_id: selectedUnitId ? selectedUnitId : undefined,
         mode,
         answer_format: answerFormat,
+        include_diagram: diagramSetting === "auto" ? null : diagramSetting === "on",
       });
 
       const assistantMsg: ChatMessage = {
@@ -207,6 +211,23 @@ export function SubjectChatTab({
               <option value="5_mark">5-Mark Question</option>
               <option value="10_mark">10-Mark Comprehensive</option>
               <option value="step_by_step">Step-by-Step</option>
+            </select>
+          </div>
+
+          {/* Visual Diagram Mode */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-[var(--text-muted)] uppercase font-semibold flex items-center gap-0.5">
+              <Workflow className="h-2.5 w-2.5" />
+              <span>Diagram:</span>
+            </span>
+            <select
+              value={diagramSetting}
+              onChange={(e) => setDiagramSetting(e.target.value as "auto" | "on" | "off")}
+              className="rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] px-2 py-1 text-[11px] text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring-focus)]"
+            >
+              <option value="auto">Auto-Detect</option>
+              <option value="on">Always On</option>
+              <option value="off">Off (Prose)</option>
             </select>
           </div>
 
@@ -313,7 +334,27 @@ export function SubjectChatTab({
                 )}
 
                 {/* Message Body */}
-                <div className="whitespace-pre-wrap">{msg.text}</div>
+                <div className="whitespace-pre-wrap leading-relaxed">{msg.text}</div>
+
+                {/* Visual Explanation Diagram (Mermaid) */}
+                {msg.responseMeta?.has_diagram && msg.responseMeta.diagram_code && (
+                  <MermaidDiagram
+                    code={msg.responseMeta.diagram_code}
+                    diagramType={msg.responseMeta.diagram_type}
+                    caption={
+                      msg.responseMeta.diagram_type === "flowchart"
+                        ? "Generated Flowchart from Course Content"
+                        : "Visual Process Diagram"
+                    }
+                  />
+                )}
+
+                {/* Graceful diagram notice if syntax was rejected */}
+                {msg.responseMeta?.diagram_error && (
+                  <div className="my-2 rounded border border-amber-500/20 bg-amber-500/10 p-2 text-[10px] text-amber-700 dark:text-amber-300">
+                    <span className="font-medium">Diagram notice:</span> A visual diagram was requested, but syntax verification suppressed invalid diagram tokens to preserve textual accuracy.
+                  </div>
+                )}
 
                 {/* Citations Panel */}
                 {msg.responseMeta && msg.responseMeta.citations.length > 0 && (

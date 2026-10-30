@@ -86,7 +86,7 @@ Development follows the audited phase plan outlined in [`docs/phases.md`](docs/p
 - [x] **Phase 3**: Upload, Storage, and Document Processing (OCR & Parsing)
 - [x] **Phase 4**: Academic RAG Retrieval and Grounded Answering
 - [x] **Phase 5**: Citations and Page-Level Source Navigation
-- [ ] **Phase 6**: Visual Explanations and Mermaid Flowchart Rendering
+- [x] **Phase 6**: Visual Explanations and Mermaid Flowchart Rendering
 - [ ] **Phase 7**: Previous Question Paper Workflows & Exam Formatting
 - [ ] **Phase 8**: Reliability, Security, and Release Review
 

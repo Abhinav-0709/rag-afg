@@ -1,3 +1,4 @@
+import re
 from typing import List, Optional
 from datetime import datetime, timezone
 from app.config import settings
@@ -13,6 +14,7 @@ from app.models.rag import (
 from app.repositories.base import WorkspaceRepository
 from app.services.retrieval_service import HybridRetrievalService
 from app.services.ai_providers import get_llm_provider
+from app.services.mermaid_service import MermaidService
 
 
 class AcademicRAGService:
@@ -73,6 +75,13 @@ class AcademicRAGService:
                 f"[Source {i}: {c.document_title} ({page_label})]\n{c.excerpt}"
             )
 
+        # 5. Check visual explanation intent
+        wants_diagram, diagram_type = MermaidService.detect_diagram_intent(
+            query=request.query,
+            answer_format=request.answer_format,
+            explicit_request=request.include_diagram,
+        )
+
         context_str = "\n\n".join(context_blocks) if context_blocks else "NO_CONTEXT_FOUND"
 
         system_prompt = (
@@ -85,6 +94,12 @@ class AcademicRAGService:
             "do not contain enough evidence.\n"
             "4. Structure answers according to the requested format (detailed, short, marks-based, or step-by-step)."
         )
+
+        if wants_diagram:
+            system_prompt += (
+                f"\n5. The student requested or would benefit from a visual diagram. At the end of your response, "
+                f"provide a valid Mermaid diagram ({diagram_type}) enclosed in ```mermaid ... ``` code fences."
+            )
 
         user_prompt = (
             f"=== RETRIEVED ACADEMIC CONTEXT ===\n"
@@ -109,6 +124,32 @@ class AcademicRAGService:
         elif not is_grounded:
             disclaimer = "Answer indicates insufficient source evidence in the uploaded workspace."
 
+        # 7. Extract, validate, and sanitize Mermaid diagram if present
+        has_diagram = False
+        diagram_code = None
+        diagram_error = None
+
+        mermaid_match = re.search(r"```(?:mermaid)?\s*\n(.*?)\n```", answer_text, re.DOTALL)
+        if mermaid_match:
+            raw_diagram = mermaid_match.group(1).strip()
+            is_valid, sanitized, err = MermaidService.validate_and_sanitize_mermaid(raw_diagram)
+            if is_valid:
+                has_diagram = True
+                diagram_code = sanitized
+            else:
+                diagram_error = err
+            # Strip mermaid block from text so the prose is cleanly formatted
+            answer_text = re.sub(r"```(?:mermaid)?\s*\n.*?\n```", "", answer_text, flags=re.DOTALL).strip()
+        elif wants_diagram and is_grounded:
+            # Fallback diagram generation from extracted points/steps
+            lines = [l.strip("- *0123456789. ") for l in answer_text.split("\n") if len(l.strip()) > 8]
+            fallback_code = MermaidService.generate_fallback_diagram(lines[:5], diagram_type=diagram_type)
+            if fallback_code:
+                is_valid, sanitized, _ = MermaidService.validate_and_sanitize_mermaid(fallback_code)
+                if is_valid:
+                    has_diagram = True
+                    diagram_code = sanitized
+
         return RAGQueryResponse(
             answer=answer_text,
             grounded=is_grounded,
@@ -116,6 +157,10 @@ class AcademicRAGService:
             format_used=request.answer_format,
             citations=citations,
             retrieved_count=len(citations),
+            has_diagram=has_diagram,
+            diagram_code=diagram_code,
+            diagram_type=diagram_type if has_diagram else None,
+            diagram_error=diagram_error,
             disclaimer=disclaimer,
             timestamp=datetime.now(timezone.utc),
         )

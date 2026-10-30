@@ -146,22 +146,35 @@ class LocalAcademicLLMProvider(LLMProvider):
             )
 
         # Structure response according to requested format mentioned in prompt
+        diagram_block = ""
+        if "mermaid diagram" in system_prompt.lower() or "flowchart" in prompt.lower():
+            diagram_lines = ["```mermaid", "flowchart TD"]
+            for i, s in enumerate(sentences[:4], 1):
+                clean_s = s.replace('"', "'").strip()
+                if len(clean_s) > 50:
+                    clean_s = clean_s[:47] + "..."
+                diagram_lines.append(f'    Node{i}["{i}. {clean_s}"]')
+                if i > 1:
+                    diagram_lines.append(f"    Node{i-1} --> Node{i}")
+            diagram_lines.append("```")
+            diagram_block = "\n\n" + "\n".join(diagram_lines)
+
         if "Format: 2_mark" in prompt or "Format: short" in prompt:
             summary = " ".join(sentences[:2])
-            return f"**Summary Answer:**\n\n{summary}"
+            return f"**Summary Answer:**\n\n{summary}{diagram_block}"
         elif "Format: 5_mark" in prompt:
             points = "\n".join(f"- **Point {i+1}:** {s}" for i, s in enumerate(sentences[:4]))
-            return f"**Structured Answer (5 Marks):**\n\n{points}"
+            return f"**Structured Answer (5 Marks):**\n\n{points}{diagram_block}"
         elif "Format: step_by_step" in prompt:
             steps = "\n".join(f"{i+1}. {s}" for i, s in enumerate(sentences[:5]))
-            return f"**Step-by-Step Explanation:**\n\n{steps}"
+            return f"**Step-by-Step Explanation:**\n\n{steps}{diagram_block}"
         else:
             main_text = " ".join(sentences[:5])
             bullet_points = "\n".join(f"- {s}" for s in sentences[5:8]) if len(sentences) > 5 else ""
             res = f"Based on the uploaded course materials:\n\n{main_text}"
             if bullet_points:
                 res += f"\n\n**Key Observations:**\n{bullet_points}"
-            return res
+            return f"{res}{diagram_block}"
 
 
 class GeminiLLMProvider(LLMProvider):

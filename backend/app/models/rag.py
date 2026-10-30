@@ -65,6 +65,7 @@ class RAGQueryRequest(BaseModel):
     mode: AnswerMode = Field(AnswerMode.SOURCE_ONLY, description="Grounded source mode")
     answer_format: AnswerFormat = Field(AnswerFormat.DETAILED, description="Academic answer format")
     source_types: Optional[List[SourceType]] = Field(None, description="Optional filter by document categories")
+    include_diagram: Optional[bool] = Field(None, description="Whether to generate a Mermaid visual diagram (auto-detected if None)")
 
 
 class RAGQueryResponse(BaseModel):
@@ -74,6 +75,10 @@ class RAGQueryResponse(BaseModel):
     format_used: AnswerFormat
     citations: List[RetrievedCitation]
     retrieved_count: int
+    has_diagram: bool = False
+    diagram_code: Optional[str] = None
+    diagram_type: Optional[str] = None
+    diagram_error: Optional[str] = None
     disclaimer: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 

@@ -116,6 +116,7 @@ export interface RAGQueryRequest {
   mode: AnswerMode;
   answer_format: AnswerFormat;
   source_types?: SourceType[];
+  include_diagram?: boolean | null;
 }
 
 export interface RAGQueryResponse {
@@ -125,6 +126,10 @@ export interface RAGQueryResponse {
   format_used: AnswerFormat;
   citations: RetrievedCitation[];
   retrieved_count: number;
+  has_diagram?: boolean;
+  diagram_code?: string | null;
+  diagram_type?: string | null;
+  diagram_error?: string | null;
   disclaimer?: string | null;
   timestamp: string;
 }
