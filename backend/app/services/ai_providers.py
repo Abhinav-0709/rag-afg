@@ -204,6 +204,141 @@ class GeminiLLMProvider(LLMProvider):
         return await self.fallback.generate_answer(prompt, system_prompt)
 
 
+class GroqLLMProvider(LLMProvider):
+    """
+    Groq Cloud API provider using the high-speed Llama-3.3 / Mixtral inference endpoints.
+    OpenAI-compatible schema with automatic local fallback.
+    """
+    def __init__(self, api_key: str, model: str = "llama-3.3-70b-versatile"):
+        self.api_key = api_key
+        self.model = model
+        self.fallback = LocalAcademicLLMProvider()
+
+    async def generate_answer(self, prompt: str, system_prompt: str) -> str:
+        if not self.api_key:
+            return await self.fallback.generate_answer(prompt, system_prompt)
+
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.2,
+            "max_tokens": 2048,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                res = await client.post(url, headers=headers, json=payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    choices = data.get("choices", [])
+                    if choices:
+                        content = choices[0].get("message", {}).get("content", "")
+                        if content:
+                            return content.strip()
+        except Exception:
+            pass
+
+        return await self.fallback.generate_answer(prompt, system_prompt)
+
+
+class NemotronLLMProvider(LLMProvider):
+    """
+    NVIDIA NIM API provider for Llama-3.1-Nemotron / Nemotron-4 academic reasoning models.
+    OpenAI-compatible API format with automatic local fallback.
+    """
+    def __init__(self, api_key: str, model: str = "nvidia/llama-3.1-nemotron-70b-instruct"):
+        self.api_key = api_key
+        self.model = model
+        self.fallback = LocalAcademicLLMProvider()
+
+    async def generate_answer(self, prompt: str, system_prompt: str) -> str:
+        if not self.api_key:
+            return await self.fallback.generate_answer(prompt, system_prompt)
+
+        url = "https://integrate.api.nvidia.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.2,
+            "top_p": 0.7,
+            "max_tokens": 2048,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                res = await client.post(url, headers=headers, json=payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    choices = data.get("choices", [])
+                    if choices:
+                        content = choices[0].get("message", {}).get("content", "")
+                        if content:
+                            return content.strip()
+        except Exception:
+            pass
+
+        return await self.fallback.generate_answer(prompt, system_prompt)
+
+
+class OpenAILLMProvider(LLMProvider):
+    """
+    Standard OpenAI API provider with automatic local fallback.
+    """
+    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+        self.api_key = api_key
+        self.model = model
+        self.fallback = LocalAcademicLLMProvider()
+
+    async def generate_answer(self, prompt: str, system_prompt: str) -> str:
+        if not self.api_key:
+            return await self.fallback.generate_answer(prompt, system_prompt)
+
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.2,
+            "max_tokens": 2048,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                res = await client.post(url, headers=headers, json=payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    choices = data.get("choices", [])
+                    if choices:
+                        content = choices[0].get("message", {}).get("content", "")
+                        if content:
+                            return content.strip()
+        except Exception:
+            pass
+
+        return await self.fallback.generate_answer(prompt, system_prompt)
+
+
 def get_embedding_provider() -> EmbeddingProvider:
     if settings.EMBEDDING_PROVIDER == "gemini" and settings.GEMINI_API_KEY:
         return GeminiEmbeddingProvider(
@@ -214,10 +349,29 @@ def get_embedding_provider() -> EmbeddingProvider:
 
 
 def get_llm_provider() -> LLMProvider:
-    if settings.AI_PROVIDER == "gemini" and settings.GEMINI_API_KEY:
+    provider = settings.AI_PROVIDER.lower().strip()
+    if provider == "gemini" and settings.GEMINI_API_KEY:
         return GeminiLLMProvider(
             api_key=settings.GEMINI_API_KEY,
             model=settings.GEMINI_MODEL,
         )
+    elif provider == "groq" and settings.GROQ_API_KEY:
+        return GroqLLMProvider(
+            api_key=settings.GROQ_API_KEY,
+            model=settings.GROQ_MODEL,
+        )
+    elif provider in ("nemotron", "nvidia"):
+        api_key = settings.NEMOTRON_API_KEY or settings.NVIDIA_API_KEY
+        if api_key:
+            return NemotronLLMProvider(
+                api_key=api_key,
+                model=settings.NEMOTRON_MODEL,
+            )
+    elif provider == "openai" and settings.OPENAI_API_KEY:
+        return OpenAILLMProvider(
+            api_key=settings.OPENAI_API_KEY,
+            model=settings.OPENAI_MODEL,
+        )
+
     return LocalAcademicLLMProvider()
 

@@ -51,7 +51,11 @@ export function SubjectWorkspaceView({
   // Modals state
   const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [viewingResource, setViewingResource] = useState<AcademicResource | null>(null);
+  const [viewerTarget, setViewerTarget] = useState<{
+    resource: AcademicResource;
+    pageNumber?: number;
+    highlightSnippet?: string;
+  } | null>(null);
   const [resourceFilter, setResourceFilter] = useState<string>("all");
 
   useEffect(() => {
@@ -395,7 +399,7 @@ export function SubjectWorkspaceView({
                     className="flex items-center justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] p-3.5 transition-colors hover:border-[var(--border-active)] text-xs"
                   >
                     <div
-                      onClick={() => setViewingResource(res)}
+                      onClick={() => setViewerTarget({ resource: res })}
                       className="flex items-start gap-3 cursor-pointer flex-1"
                     >
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[var(--border-default)] bg-[var(--bg-surface-elevated)] text-[var(--text-primary)]">
@@ -440,7 +444,7 @@ export function SubjectWorkspaceView({
                     <div className="flex items-center gap-1.5 ml-3">
                       <button
                         type="button"
-                        onClick={() => setViewingResource(res)}
+                        onClick={() => setViewerTarget({ resource: res })}
                         aria-label="Inspect extracted pages"
                         className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
                         title="View Extracted Pages"
@@ -483,7 +487,13 @@ export function SubjectWorkspaceView({
           subject={subject}
           units={units}
           resources={resources}
-          onOpenViewer={(res) => setViewingResource(res)}
+          onOpenViewer={(res, pageNumber, snippet) =>
+            setViewerTarget({
+              resource: res,
+              pageNumber,
+              highlightSnippet: snippet,
+            })
+          }
         />
       )}
 
@@ -504,10 +514,12 @@ export function SubjectWorkspaceView({
         onResourceUploaded={(newRes) => setResources((prev) => [newRes, ...prev])}
       />
 
-      {viewingResource && (
+      {viewerTarget && (
         <DocumentViewerModal
-          resource={viewingResource}
-          onClose={() => setViewingResource(null)}
+          resource={viewerTarget.resource}
+          initialPageNumber={viewerTarget.pageNumber}
+          highlightSnippet={viewerTarget.highlightSnippet}
+          onClose={() => setViewerTarget(null)}
         />
       )}
     </div>

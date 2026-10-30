@@ -7,6 +7,8 @@ from app.models.rag import (
     RAGQueryRequest,
     RAGQueryResponse,
     RetrievedCitation,
+    CitationVerificationRequest,
+    CitationVerificationResult,
 )
 from app.repositories.base import WorkspaceRepository
 from app.services.retrieval_service import HybridRetrievalService
@@ -26,7 +28,7 @@ class AcademicRAGService:
             raise ValueError(f"Subject workspace with id '{request.subject_id}' does not exist.")
 
         # 2. Retrieve relevant context passages
-        citations: List[RetrievedCitation] = await self.retrieval_service.retrieve(
+        raw_citations: List[RetrievedCitation] = await self.retrieval_service.retrieve(
             subject_id=request.subject_id,
             query=request.query,
             unit_id=request.unit_id,
@@ -34,7 +36,19 @@ class AcademicRAGService:
             top_k=settings.TOP_K_RETRIEVAL,
         )
 
-        # 3. Handle insufficient evidence in source_only mode
+        # 3. Citation integrity validation: strictly ensure each citation references a real resource & valid page
+        citations: List[RetrievedCitation] = []
+        for c in raw_citations:
+            res = await self.repo.get_resource(c.resource_id)
+            if res and res.subject_id == request.subject_id:
+                # Validate page presence
+                pages = await self.repo.get_document_pages(c.resource_id)
+                page_exists = any(p.page_number == c.page_number for p in pages)
+                if page_exists or not pages:
+                    c.verified = True
+                    citations.append(c)
+
+        # 4. Handle insufficient evidence in source_only mode
         if not citations and request.mode == AnswerMode.SOURCE_ONLY:
             return RAGQueryResponse(
                 answer=(
@@ -51,11 +65,12 @@ class AcademicRAGService:
                 timestamp=datetime.now(timezone.utc),
             )
 
-        # 4. Construct prompt with retrieved passages
+        # 5. Construct prompt with retrieved passages
         context_blocks = []
         for i, c in enumerate(citations, 1):
+            page_label = f"Page {c.page_number}" if c.page_number > 0 else "Full Document"
             context_blocks.append(
-                f"[Source {i}: {c.document_title} (Page {c.page_number})]\n{c.excerpt}"
+                f"[Source {i}: {c.document_title} ({page_label})]\n{c.excerpt}"
             )
 
         context_str = "\n\n".join(context_blocks) if context_blocks else "NO_CONTEXT_FOUND"
@@ -81,7 +96,7 @@ class AcademicRAGService:
             f"Subject: {subject.name}"
         )
 
-        # 5. Generate grounded answer via LLM
+        # 6. Generate grounded answer via LLM
         answer_text = await self.llm_provider.generate_answer(
             prompt=user_prompt,
             system_prompt=system_prompt,
@@ -103,4 +118,86 @@ class AcademicRAGService:
             retrieved_count=len(citations),
             disclaimer=disclaimer,
             timestamp=datetime.now(timezone.utc),
+        )
+
+    async def verify_citation(
+        self,
+        request: CitationVerificationRequest,
+    ) -> CitationVerificationResult:
+        """
+        Validates citation against database ground truth.
+        Verifies:
+        1. Resource existence
+        2. Subject isolation (matches subject_id)
+        3. Real page presence in document_pages
+        """
+        resource = await self.repo.get_resource(request.resource_id)
+        if not resource:
+            return CitationVerificationResult(
+                valid=False,
+                subject_match=False,
+                resource_exists=False,
+                page_exists=False,
+                message=f"Referenced academic resource '{request.resource_id}' does not exist.",
+            )
+
+        subject_match = resource.subject_id == request.subject_id
+        if not subject_match:
+            return CitationVerificationResult(
+                valid=False,
+                subject_match=False,
+                resource_exists=True,
+                page_exists=False,
+                resource_title=resource.title,
+                file_name=resource.file_name,
+                source_type=resource.source_type,
+                message=f"Referenced resource belongs to another subject, violating workspace isolation.",
+            )
+
+        pages = await self.repo.get_document_pages(request.resource_id)
+        target_page = next((p for p in pages if p.page_number == request.page_number), None)
+
+        if not target_page:
+            # If no pages exist yet at all for this resource
+            if not pages:
+                return CitationVerificationResult(
+                    valid=True,
+                    subject_match=True,
+                    resource_exists=True,
+                    page_exists=False,
+                    resource_title=resource.title,
+                    file_name=resource.file_name,
+                    source_type=resource.source_type,
+                    page_number=request.page_number,
+                    message="Resource verified; page extraction pending or unpaged document.",
+                )
+
+            return CitationVerificationResult(
+                valid=False,
+                subject_match=True,
+                resource_exists=True,
+                page_exists=False,
+                resource_title=resource.title,
+                file_name=resource.file_name,
+                source_type=resource.source_type,
+                page_number=request.page_number,
+                message=f"Page {request.page_number} does not exist in this document (total pages: {len(pages)}).",
+            )
+
+        char_count = target_page.char_count
+        content = target_page.content
+        preview = content[:250].strip() + ("..." if len(content) > 250 else "")
+
+        return CitationVerificationResult(
+            valid=True,
+            subject_match=True,
+            resource_exists=True,
+            page_exists=True,
+            resource_title=resource.title,
+            file_name=resource.file_name,
+            source_type=resource.source_type,
+            page_number=request.page_number,
+            page_char_count=char_count,
+            surrounding_context=preview,
+            message=f"Verified citation: '{resource.title}' (Page {request.page_number}).",
         )

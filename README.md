@@ -44,6 +44,7 @@ rag/
 
 - **Frontend**: Next.js 16 (App Router), TypeScript, React 19, Tailwind CSS v4, Lucide Icons.
 - **Backend**: Python 3.11+, FastAPI, Pydantic v2, Uvicorn, managed with `uv`.
+- **LLM & AI Providers**: Flexible multi-provider support for **Nemotron** (NVIDIA NIM), **Google Gemini**, **Groq** (Llama 3.3 / Mixtral), and **OpenAI**, with deterministic local academic offline fallback.
 - **Database & Storage**: Dual persistence abstraction — SQLite for rapid local development/offline study, with a clean repository interface for Supabase (PostgreSQL + pgvector + Supabase Storage).
 
 ---
@@ -84,7 +85,7 @@ Development follows the audited phase plan outlined in [`docs/phases.md`](docs/p
 - [x] **Phase 2**: Subject Workspaces and Academic Resource Records
 - [x] **Phase 3**: Upload, Storage, and Document Processing (OCR & Parsing)
 - [x] **Phase 4**: Academic RAG Retrieval and Grounded Answering
-- [ ] **Phase 5**: Citations and Page-Level Source Navigation
+- [x] **Phase 5**: Citations and Page-Level Source Navigation
 - [ ] **Phase 6**: Visual Explanations and Mermaid Flowchart Rendering
 - [ ] **Phase 7**: Previous Question Paper Workflows & Exam Formatting
 - [ ] **Phase 8**: Reliability, Security, and Release Review

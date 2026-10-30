@@ -8,6 +8,8 @@ import {
   AlertTriangle,
   Loader2,
   BookOpen,
+  MapPin,
+  Highlighter,
 } from "lucide-react";
 import {
   AcademicResource,
@@ -18,15 +20,77 @@ import {
 
 interface DocumentViewerModalProps {
   resource: AcademicResource;
+  initialPageNumber?: number;
+  highlightSnippet?: string;
   onClose: () => void;
+}
+
+function renderHighlightedText(content: string, snippet?: string | null) {
+  if (!snippet) return content;
+  const cleanSnippet = snippet.replace(/^\.\.\.|\.\.\.$/g, "").trim();
+  if (!cleanSnippet || cleanSnippet.length < 3) return content;
+
+  // Exact or near substring match
+  const lowerContent = content.toLowerCase();
+  const lowerSnippet = cleanSnippet.toLowerCase();
+  const pos = lowerContent.indexOf(lowerSnippet);
+
+  if (pos !== -1) {
+    const before = content.slice(0, pos);
+    const match = content.slice(pos, pos + cleanSnippet.length);
+    const after = content.slice(pos + cleanSnippet.length);
+    return (
+      <>
+        {before}
+        <mark className="rounded bg-amber-300/80 dark:bg-amber-400/30 text-[var(--text-primary)] px-1 py-0.5 font-semibold ring-1 ring-amber-500/40">
+          {match}
+        </mark>
+        {after}
+      </>
+    );
+  }
+
+  // Token fallback for broken whitespace or multiline chunks
+  const words = cleanSnippet
+    .split(/\s+/)
+    .map((w) => w.replace(/[^\w]/g, ""))
+    .filter((w) => w.length >= 4);
+
+  if (words.length === 0) return content;
+
+  const escapedWords = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const regex = new RegExp(`\\b(${escapedWords.join("|")})\\b`, "gi");
+  const parts = content.split(regex);
+
+  return (
+    <>
+      {parts.map((part, idx) => {
+        const isMatch = words.some((w) => w.toLowerCase() === part.toLowerCase());
+        if (isMatch) {
+          return (
+            <mark
+              key={idx}
+              className="rounded bg-amber-300/80 dark:bg-amber-400/30 text-[var(--text-primary)] px-0.5 font-semibold"
+            >
+              {part}
+            </mark>
+          );
+        }
+        return part;
+      })}
+    </>
+  );
 }
 
 export function DocumentViewerModal({
   resource,
+  initialPageNumber,
+  highlightSnippet,
   onClose,
 }: DocumentViewerModalProps) {
   const [pagesData, setPagesData] = useState<DocumentPagesList | null>(null);
   const [selectedPageIndex, setSelectedPageIndex] = useState(0);
+  const [activeSnippet, setActiveSnippet] = useState<string | null>(highlightSnippet || null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +101,14 @@ export function DocumentViewerModal({
         if (!ignore) {
           setPagesData(data);
           setError(null);
+          if (initialPageNumber && data.pages.length > 0) {
+            const foundIdx = data.pages.findIndex(
+              (p) => p.page_number === initialPageNumber
+            );
+            if (foundIdx !== -1) {
+              setSelectedPageIndex(foundIdx);
+            }
+          }
         }
       })
       .catch((err: unknown) => {
@@ -57,7 +129,7 @@ export function DocumentViewerModal({
     return () => {
       ignore = true;
     };
-  }, [resource.id]);
+  }, [resource.id, initialPageNumber]);
 
   const currentPage = pagesData?.pages[selectedPageIndex];
 
@@ -129,6 +201,34 @@ export function DocumentViewerModal({
           </div>
         )}
 
+        {/* Citation Navigation Banner */}
+        {initialPageNumber && (
+          <div className="flex items-center justify-between border-b border-amber-500/30 bg-amber-500/10 px-5 py-2 text-[11px] text-amber-800 dark:text-amber-300">
+            <div className="flex items-center gap-2 font-medium">
+              <MapPin className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>
+                Navigated directly to cited location: <strong>Page {currentPage?.page_number || initialPageNumber}</strong>
+              </span>
+              {activeSnippet && (
+                <span className="flex items-center gap-1 font-mono text-[10px] text-amber-700 dark:text-amber-300/80">
+                  <Highlighter className="h-3 w-3" />
+                  <span>Snippet highlighted</span>
+                </span>
+              )}
+            </div>
+
+            {activeSnippet && (
+              <button
+                type="button"
+                onClick={() => setActiveSnippet(null)}
+                className="rounded px-2 py-0.5 text-[10px] font-medium border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 transition-colors"
+              >
+                Clear Highlight
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Body content with page navigation */}
         <div className="flex flex-1 overflow-hidden">
           {/* Left: Page list selector */}
@@ -148,6 +248,8 @@ export function DocumentViewerModal({
             ) : (
               pagesData.pages.map((p, idx) => {
                 const isSelected = selectedPageIndex === idx;
+                const isCitedPage = initialPageNumber === p.page_number;
+
                 return (
                   <button
                     key={p.id}
@@ -159,7 +261,12 @@ export function DocumentViewerModal({
                         : "text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
                     }`}
                   >
-                    <span>Page {p.page_number}</span>
+                    <div className="flex items-center gap-1.5">
+                      {isCitedPage && (
+                        <span className="flex h-1.5 w-1.5 rounded-full bg-amber-500" title="Cited Page" />
+                      )}
+                      <span>Page {p.page_number}</span>
+                    </div>
                     <span className="text-[10px] text-[var(--text-muted)] font-mono">
                       {p.char_count} chars
                     </span>
@@ -188,8 +295,15 @@ export function DocumentViewerModal({
             ) : (
               <div className="space-y-4 max-w-3xl mx-auto">
                 <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2">
-                  <div className="text-xs font-semibold text-[var(--text-primary)]">
-                    Extracted Text — Page {currentPage.page_number}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-[var(--text-primary)]">
+                      Extracted Text — Page {currentPage.page_number}
+                    </span>
+                    {initialPageNumber === currentPage.page_number && (
+                      <span className="rounded bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.2 text-[9px] font-mono text-amber-600 dark:text-amber-400 font-medium">
+                        CITED PAGE
+                      </span>
+                    )}
                   </div>
                   <div className="text-[11px] text-[var(--text-muted)] font-mono">
                     {currentPage.char_count} characters
@@ -197,7 +311,9 @@ export function DocumentViewerModal({
                 </div>
 
                 <div className="rounded-lg border border-[var(--border-default)] bg-[var(--code-bg)] p-4 font-mono text-xs text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap select-text">
-                  {currentPage.content || (
+                  {currentPage.content ? (
+                    renderHighlightedText(currentPage.content, activeSnippet)
+                  ) : (
                     <span className="text-[var(--text-muted)] italic">
                       [Blank page or non-textual graphic content]
                     </span>

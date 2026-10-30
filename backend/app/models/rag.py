@@ -30,6 +30,30 @@ class RetrievedCitation(BaseModel):
     page_number: int
     excerpt: str
     score: float
+    verified: bool = True
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CitationVerificationRequest(BaseModel):
+    subject_id: str = Field(..., description="Subject workspace ID")
+    resource_id: str = Field(..., description="Academic resource ID")
+    chunk_id: str = Field(..., description="Chunk ID")
+    page_number: int = Field(..., description="Page number referenced in citation")
+
+
+class CitationVerificationResult(BaseModel):
+    valid: bool
+    subject_match: bool
+    resource_exists: bool
+    page_exists: bool
+    resource_title: Optional[str] = None
+    file_name: Optional[str] = None
+    source_type: Optional[SourceType] = None
+    page_number: Optional[int] = None
+    page_char_count: Optional[int] = None
+    surrounding_context: Optional[str] = None
+    message: str
 
     model_config = ConfigDict(from_attributes=True)
 

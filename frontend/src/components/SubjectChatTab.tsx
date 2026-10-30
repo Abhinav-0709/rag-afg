@@ -9,6 +9,8 @@ import {
   AnswerMode,
   AnswerFormat,
   queryAcademicRAG,
+  verifyCitation,
+  CitationVerificationResult,
 } from "@/lib/api";
 import {
   Send,
@@ -16,18 +18,24 @@ import {
   ShieldCheck,
   BookOpen,
   Sparkles,
-  FileText,
+  ExternalLink,
   AlertCircle,
   ChevronDown,
   ChevronUp,
   RotateCcw,
+  CheckCircle2,
+  HelpCircle,
 } from "lucide-react";
 
 interface SubjectChatTabProps {
   subject: Subject;
   units: SyllabusUnit[];
   resources: AcademicResource[];
-  onOpenViewer: (resource: AcademicResource) => void;
+  onOpenViewer: (
+    resource: AcademicResource,
+    pageNumber?: number,
+    highlightSnippet?: string
+  ) => void;
 }
 
 interface ChatMessage {
@@ -57,6 +65,38 @@ export function SubjectChatTab({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedCitationId, setExpandedCitationId] = useState<string | null>(null);
+  const [verificationMap, setVerificationMap] = useState<
+    Record<string, CitationVerificationResult | "loading">
+  >({});
+
+  async function handleVerifyCitation(
+    chunkId: string,
+    resourceId: string,
+    pageNumber: number
+  ) {
+    if (verificationMap[chunkId]) return;
+    setVerificationMap((prev) => ({ ...prev, [chunkId]: "loading" }));
+    try {
+      const res = await verifyCitation({
+        subject_id: subject.id,
+        resource_id: resourceId,
+        chunk_id: chunkId,
+        page_number: pageNumber,
+      });
+      setVerificationMap((prev) => ({ ...prev, [chunkId]: res }));
+    } catch {
+      setVerificationMap((prev) => ({
+        ...prev,
+        [chunkId]: {
+          valid: false,
+          subject_match: false,
+          resource_exists: false,
+          page_exists: false,
+          message: "Failed to verify citation with the academic repository.",
+        },
+      }));
+    }
+  }
 
   const samplePrompts = [
     "Explain the fundamental concepts in this course",
@@ -287,56 +327,132 @@ export function SubjectChatTab({
                       {msg.responseMeta.citations.map((c) => {
                         const isExpanded = expandedCitationId === c.chunk_id;
                         const matchingRes = resources.find((r) => r.id === c.resource_id);
+                        const vResult = verificationMap[c.chunk_id];
+                        const matchPercent = Math.min(Math.round(c.score * 100), 100);
 
                         return (
                           <div
                             key={c.chunk_id}
-                            className="rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] p-2 text-[11px] transition-colors"
+                            className="rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] p-2.5 text-[11px] transition-colors"
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-1.5">
                                 <span className="font-semibold text-[var(--text-primary)]">
                                   {c.document_title}
                                 </span>
-                                <span className="font-mono text-[10px] text-[var(--text-muted)]">
-                                  Page {c.page_number}
+                                <span className="rounded bg-[var(--bg-surface-elevated)] border border-[var(--border-default)] px-1.5 py-0.2 font-mono text-[10px] text-[var(--text-secondary)]">
+                                  {c.page_number > 0 ? `Page ${c.page_number}` : "Unpaged"}
                                 </span>
                                 <span className="rounded border border-[var(--border-default)] bg-[var(--bg-surface)] px-1 py-0.1 font-mono text-[9px] text-[var(--text-secondary)] uppercase">
                                   {c.source_type}
                                 </span>
+                                <span className="rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-1.5 py-0.2 font-mono text-[9px] font-medium">
+                                  {matchPercent}% Match
+                                </span>
                               </div>
 
                               <div className="flex items-center gap-2">
-                                {matchingRes && (
+                                {matchingRes ? (
                                   <button
                                     type="button"
-                                    onClick={() => onOpenViewer(matchingRes)}
-                                    className="text-[10px] text-[var(--accent-primary)] hover:underline flex items-center gap-0.5"
+                                    onClick={() =>
+                                      onOpenViewer(
+                                        matchingRes,
+                                        c.page_number > 0 ? c.page_number : 1,
+                                        c.excerpt
+                                      )
+                                    }
+                                    className="text-[10px] font-medium text-[var(--accent-primary)] hover:underline flex items-center gap-1"
+                                    title={`Open ${c.document_title} at Page ${c.page_number}`}
                                   >
-                                    <FileText className="h-3 w-3" />
-                                    <span>Open Document</span>
+                                    <ExternalLink className="h-3 w-3" />
+                                    <span>
+                                      {c.page_number > 0 ? `Jump to Page ${c.page_number}` : "Open Document"}
+                                    </span>
                                   </button>
+                                ) : (
+                                  <span className="text-[10px] text-[var(--text-muted)] italic">
+                                    Source archived
+                                  </span>
                                 )}
+
                                 <button
                                   type="button"
                                   onClick={() =>
                                     setExpandedCitationId(isExpanded ? null : c.chunk_id)
                                   }
-                                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-0.5"
+                                  aria-label={isExpanded ? "Collapse citation" : "Expand citation"}
                                 >
                                   {isExpanded ? (
-                                    <ChevronUp className="h-3 w-3" />
+                                    <ChevronUp className="h-3.5 w-3.5" />
                                   ) : (
-                                    <ChevronDown className="h-3 w-3" />
+                                    <ChevronDown className="h-3.5 w-3.5" />
                                   )}
                                 </button>
                               </div>
                             </div>
 
-                            {/* Excerpt */}
+                            {/* Excerpt and Integrity details */}
                             {isExpanded && (
-                              <div className="mt-1.5 pt-1.5 border-t border-[var(--border-subtle)] font-mono text-[10px] text-[var(--text-secondary)] leading-relaxed italic bg-[var(--code-bg)] p-2 rounded">
-                                &ldquo;{c.excerpt}&rdquo;
+                              <div className="mt-2 pt-2 border-t border-[var(--border-subtle)] space-y-2">
+                                <div className="font-mono text-[10px] text-[var(--text-secondary)] leading-relaxed italic bg-[var(--code-bg)] p-2.5 rounded border border-[var(--border-subtle)]">
+                                  &ldquo;{c.excerpt}&rdquo;
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[10px]">
+                                  <div className="flex items-center gap-2">
+                                    {vResult === "loading" ? (
+                                      <span className="flex items-center gap-1 text-[var(--text-muted)]">
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        <span>Verifying ground-truth...</span>
+                                      </span>
+                                    ) : vResult && typeof vResult === "object" ? (
+                                      vResult.valid ? (
+                                        <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                                          <CheckCircle2 className="h-3 w-3" />
+                                          <span>Verified Ground Truth: {vResult.message}</span>
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center gap-1 text-red-500 font-medium">
+                                          <AlertCircle className="h-3 w-3" />
+                                          <span>Integrity Warning: {vResult.message}</span>
+                                        </span>
+                                      )
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleVerifyCitation(
+                                            c.chunk_id,
+                                            c.resource_id,
+                                            c.page_number
+                                          )
+                                        }
+                                        className="inline-flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:underline"
+                                      >
+                                        <HelpCircle className="h-3 w-3" />
+                                        <span>Verify ground-truth record</span>
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {matchingRes && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        onOpenViewer(
+                                          matchingRes,
+                                          c.page_number > 0 ? c.page_number : 1,
+                                          c.excerpt
+                                        )
+                                      }
+                                      className="rounded bg-[var(--bg-surface-elevated)] border border-[var(--border-default)] px-2 py-1 text-[10px] text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
+                                    >
+                                      Inspect Snippet in Viewer →
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </div>

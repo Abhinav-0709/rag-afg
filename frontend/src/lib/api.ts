@@ -92,6 +92,21 @@ export interface RetrievedCitation {
   page_number: number;
   excerpt: string;
   score: number;
+  verified?: boolean;
+}
+
+export interface CitationVerificationResult {
+  valid: boolean;
+  subject_match: boolean;
+  resource_exists: boolean;
+  page_exists: boolean;
+  resource_title?: string | null;
+  file_name?: string | null;
+  source_type?: SourceType | null;
+  page_number?: number | null;
+  page_char_count?: number | null;
+  surrounding_context?: string | null;
+  message: string;
 }
 
 export interface RAGQueryRequest {
@@ -286,6 +301,24 @@ export async function queryAcademicRAG(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Failed to query academic knowledge assistant");
+  }
+  return res.json();
+}
+
+export async function verifyCitation(params: {
+  subject_id: string;
+  resource_id: string;
+  chunk_id: string;
+  page_number: number;
+}): Promise<CitationVerificationResult> {
+  const res = await fetch(`${API_BASE_URL}/rag/verify-citation`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to verify citation");
   }
   return res.json();
 }
